@@ -228,7 +228,7 @@ class AISolver:
 
 
 # ==========================================
-# PHẦN 2: THREAD-SAFE GUI VỚI HISTORY & UNDO
+# PHẦN 2: THREAD-SAFE GUI VỚI HISTORY & UNDO & TIMER
 # ==========================================
 class GomokuApp:
     def __init__(self, root):
@@ -240,7 +240,7 @@ class GomokuApp:
         self.state_lock = threading.Lock()
         
         self.board = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
-        self.move_history = [] # Lịch sử đi cờ: chứa tuple (r, c, piece)
+        self.move_history = [] 
         
         self.player_piece = X_PIECE
         self.ai_piece = O_PIECE
@@ -258,6 +258,11 @@ class GomokuApp:
         self.cell_size = 0
         self.offset_x = 0
         self.offset_y = 0
+
+        # --- TIMER VARIABLES ---
+        self.timer_running = False
+        self.start_time_real = 0
+        self.timer_id = None
 
         self.setup_styles()
         self.setup_ui()
@@ -285,7 +290,27 @@ class GomokuApp:
             if EMPTY in row: return False
         return True
 
-    # --------------- TÍNH NĂNG MỚI: RESET & UNDO ---------------
+    # --------------- TÍNH NĂNG BẤM GIỜ ---------------
+    def check_and_start_timer(self):
+        if not self.timer_running:
+            self.timer_running = True
+            self.start_time_real = time.time()
+            self.update_timer()
+
+    def update_timer(self):
+        if self.timer_running:
+            elapsed = int(time.time() - self.start_time_real)
+            mins, secs = divmod(elapsed, 60)
+            self.lbl_timer.config(text=f"Thời gian: {mins:02d}:{secs:02d}")
+            self.timer_id = self.root.after(1000, self.update_timer)
+
+    def stop_timer(self):
+        self.timer_running = False
+        if self.timer_id:
+            self.root.after_cancel(self.timer_id)
+            self.timer_id = None
+
+    # --------------- TÍNH NĂNG RESET & UNDO ---------------
     
     def reset_score(self):
         """Xóa trắng tỉ số hai bên."""
@@ -297,7 +322,7 @@ class GomokuApp:
     def stop_game(self):
         """Ngắt ván cờ hiện tại, dọn dẹp bàn cờ."""
         with self.state_lock:
-            self.ai_request_id += 1 # Ép chết luồng AI đang chạy (nếu có)
+            self.ai_request_id += 1 
             self.game_active = False
             self.ai_is_thinking = False
             
@@ -310,6 +335,9 @@ class GomokuApp:
             self.btn_o.config(state=tk.NORMAL)
             self.lbl_stats.config(text="")
             
+            self.stop_timer()
+            self.lbl_timer.config(text="Thời gian: 00:00")
+            
             self.draw_board()
             self.update_status("Đã hủy ván. Vui lòng chọn quân cờ!", "#ffa502")
             logging.info("Đã dừng/reset trận đấu bằng tay.")
@@ -318,23 +346,17 @@ class GomokuApp:
         """Lùi lại 1 bước đi. Nếu AI đã đi, lùi 2 bước để tới lượt mình."""
         with self.state_lock:
             if not self.move_history:
-                return # Không có gì để lùi
+                return 
 
-            # 1. Hủy luồng AI đang tính toán ngay lập tức
             self.ai_request_id += 1
             self.ai_is_thinking = False
             
-            # Khôi phục trạng thái game nếu lỡ bấm undo khi vừa thua/thắng
             self.game_active = True 
             self.btn_x.config(state=tk.DISABLED)
             self.btn_o.config(state=tk.DISABLED)
 
-            # 2. Rút lại nước cờ
             last_piece = self.move_history[-1][2]
             
-            # Nếu nước cờ cuối trên bàn là của AI, và trước đó là nước của Player:
-            # Rút ra luôn 2 nước để trả lại quyền điều khiển cho Player.
-            # Nếu nước cờ cuối là của Player (ví dụ AI đang suy nghĩ và bị ta ngắt), chỉ cần lùi 1.
             moves_to_undo = 1
             if last_piece == self.ai_piece and len(self.move_history) >= 2:
                 moves_to_undo = 2
@@ -344,14 +366,14 @@ class GomokuApp:
                     r, c, p = self.move_history.pop()
                     self.board[r][c] = EMPTY
             
-            # 3. Ép Turn hiện tại về Player
             self.current_turn = self.player_piece
             
-            # 4. Cập nhật lại UI dựa trên History mới nhất
             if self.move_history:
                 self.last_move_ui = (self.move_history[-1][0], self.move_history[-1][1])
             else:
                 self.last_move_ui = None
+                self.stop_timer()
+                self.lbl_timer.config(text="Thời gian: 00:00")
                 
             self.winning_line_ui = []
             self.draw_board()
@@ -365,7 +387,7 @@ class GomokuApp:
             self.ai_request_id += 1
             
             self.board = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
-            self.move_history.clear() # Xóa lịch sử
+            self.move_history.clear()
             
             self.player_piece = player_piece
             self.ai_piece = O_PIECE if player_piece == X_PIECE else X_PIECE
@@ -380,6 +402,9 @@ class GomokuApp:
             self.btn_o.config(state=tk.DISABLED)
             self.lbl_stats.config(text="")
             
+            self.stop_timer()
+            self.lbl_timer.config(text="Thời gian: 00:00")
+            
             self.draw_board()
 
             if self.ai_piece == X_PIECE:
@@ -391,6 +416,7 @@ class GomokuApp:
         self.game_active = False
         self.ai_request_id += 1 
         self.ai_is_thinking = False
+        self.stop_timer()
         
         self.btn_x.config(state=tk.NORMAL)
         self.btn_o.config(state=tk.NORMAL)
@@ -426,9 +452,11 @@ class GomokuApp:
                 if self.board[r][c] != EMPTY: return
                 
                 self.board[r][c] = self.player_piece
-                self.move_history.append((r, c, self.player_piece)) # Lưu vào lịch sử
+                self.move_history.append((r, c, self.player_piece)) 
                 self.last_move_ui = (r, c)
                 self.current_turn = self.ai_piece 
+                
+                self.check_and_start_timer()
                 
                 self.draw_board()
 
@@ -469,10 +497,12 @@ class GomokuApp:
                 if self.board[r][c] != EMPTY: return
                 
                 self.board[r][c] = self.ai_piece
-                self.move_history.append((r, c, self.ai_piece)) # Lưu vào lịch sử
+                self.move_history.append((r, c, self.ai_piece)) 
                 self.last_move_ui = (r, c)
                 self.ai_is_thinking = False
                 self.current_turn = self.player_piece
+                
+                self.check_and_start_timer()
                 
                 self.draw_board()
                 self.lbl_stats.config(text=f"Depth: {depth} | Nodes: {nodes} | Cache: {hits} | Time: {t_spent}s")
@@ -508,7 +538,6 @@ class GomokuApp:
         self.time_var = tk.DoubleVar(value=1.5)
         ttk.Spinbox(config_frame, from_=0.5, to=5.0, increment=0.5, textvariable=self.time_var, width=5).pack(side=tk.LEFT)
 
-        # HÀNG NÚT THỨ NHẤT (CHỌN QUÂN)
         btn_frame = ttk.Frame(header, style="Dark.TFrame")
         btn_frame.pack(pady=5)
         self.btn_x = tk.Button(btn_frame, text="Chơi X (Đi trước)", bg="#ff4757", fg="white", command=lambda: self.start_game(X_PIECE))
@@ -516,7 +545,6 @@ class GomokuApp:
         self.btn_o = tk.Button(btn_frame, text="Chơi O (Đi sau)", bg="#1e90ff", fg="white", command=lambda: self.start_game(O_PIECE))
         self.btn_o.pack(side=tk.LEFT, padx=10)
 
-        # HÀNG NÚT THỨ HAI (CÁC TÍNH NĂNG MỚI)
         action_frame = ttk.Frame(header, style="Dark.TFrame")
         action_frame.pack(pady=5)
         
@@ -531,6 +559,9 @@ class GomokuApp:
 
         self.lbl_score = tk.Label(header, text="Bạn: 0  -  AI: 0", font=("Consolas", 18, "bold"), bg="#121212", fg="#2ed573")
         self.lbl_score.pack(pady=5)
+        
+        self.lbl_timer = tk.Label(header, text="Thời gian: 00:00", font=("Consolas", 14, "bold"), bg="#121212", fg="#ffdd59")
+        self.lbl_timer.pack(pady=2)
         
         self.lbl_status = tk.Label(header, text="Vui lòng chọn quân cờ", font=("Arial", 14), bg="#121212", fg="#ffa502")
         self.lbl_status.pack()
@@ -555,11 +586,14 @@ class GomokuApp:
         w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
         if w < 10 or h < 10: return
 
-        board_size_px = min(w, h) * 0.98
+        # Dành lại một khoảng không gian cho toạ độ (Margin)
+        margin = 40
+        board_size_px = min(w, h) * 0.9 - margin
         self.cell_size = board_size_px / BOARD_SIZE
-        self.offset_x = (w - board_size_px) / 2
-        self.offset_y = (h - board_size_px) / 2
+        self.offset_x = (w - board_size_px) / 2 + margin / 2
+        self.offset_y = (h - board_size_px) / 2 + margin / 2
 
+        # Vẽ lưới cờ
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 x1 = self.offset_x + c * self.cell_size
@@ -581,6 +615,21 @@ class GomokuApp:
                         self.canvas.create_line(x1+pad, y2-pad, x2-pad, y1+pad, fill="#ff4757", width=thickness, capstyle=tk.ROUND)
                     elif piece == O_PIECE:
                         self.canvas.create_oval(x1+pad, y1+pad, x2-pad, y2-pad, outline="#1e90ff", width=thickness)
+
+        # Vẽ Toạ độ (A,B,C... và 1,2,3...)
+        font_size = max(8, int(self.cell_size * 0.3))
+        
+        # Cột (A, B, C...)
+        for c in range(BOARD_SIZE):
+            x = self.offset_x + c * self.cell_size + self.cell_size / 2
+            y = self.offset_y - 15
+            self.canvas.create_text(x, y, text=chr(65 + c), fill="#a4b0be", font=("Arial", font_size, "bold"))
+            
+        # Hàng (1, 2, 3...)
+        for r in range(BOARD_SIZE):
+            x = self.offset_x - 15
+            y = self.offset_y + r * self.cell_size + self.cell_size / 2
+            self.canvas.create_text(x, y, text=str(r + 1), fill="#a4b0be", font=("Arial", font_size, "bold"))
 
 if __name__ == "__main__":
     root = tk.Tk()
