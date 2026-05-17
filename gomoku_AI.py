@@ -19,16 +19,78 @@ O_PIECE = 2
 ZOBRIST_TABLE = [[[random.getrandbits(64) for _ in range(3)] for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
 
 # ==========================================
-# PHẦN 1: AI SOLVER (GIỮ NGUYÊN)
+# CÁC TRẠNG THÁI KIỂM THỬ (LEVEL 3)
+# ==========================================
+TEST_CASES = {
+    "1. Trạng thái đầu ván (Trống)": [
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+    ],
+    "2. Trạng thái giữa ván (Cân bằng)": [
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,2,0,0,0,0],
+        [0,0,0,2,1,1,0,0,0],
+        [0,0,0,0,0,1,2,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+    ],
+    "3. Trạng thái X sắp thắng (Cần chặn)": [
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,2,0,0,0,0],
+        [0,0,0,0,1,0,0,0,0],
+        [0,0,0,0,1,2,0,0,0],
+        [0,0,0,0,1,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+    ],
+    "4. Trạng thái máy O có thể thắng ngay": [
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,1,1,1,0,0,0,0],
+        [0,0,0,2,2,2,0,0,0], 
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+    ],
+    "5. Trạng thái phức tạp (Nhiều nhánh)": [
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,1,0,0,0,0],
+        [0,0,0,2,1,2,0,0,0],
+        [0,0,2,1,2,1,0,0,0],
+        [0,0,0,1,2,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0],
+    ]
+}
+
+# ==========================================
+# PHẦN 1: AI SOLVER
 # ==========================================
 class AISolver:
-    def __init__(self, board_snapshot, ai_piece, player_piece, request_id, max_depth, time_limit):
+    def __init__(self, board_snapshot, ai_piece, player_piece, request_id, max_depth, time_limit, mode="hard"):
         self.board = board_snapshot
         self.ai_piece = ai_piece
         self.player_piece = player_piece
         self.request_id = request_id
         self.max_depth = max_depth
         self.time_limit = time_limit
+        self.mode = mode 
         
         self.current_hash = self._compute_initial_hash()
         self.transposition_table = {}
@@ -44,8 +106,7 @@ class AISolver:
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 p = self.board[r][c]
-                if p != EMPTY:
-                    h ^= ZOBRIST_TABLE[r][c][p]
+                if p != EMPTY: h ^= ZOBRIST_TABLE[r][c][p]
         return h
 
     def make_move(self, r, c, piece):
@@ -126,17 +187,19 @@ class AISolver:
         if not has_piece: return [(BOARD_SIZE//2, BOARD_SIZE//2)]
         
         move_set = list(set(moves))
-        def move_score(move):
-            r, c = move
-            self.board[r][c] = self.ai_piece
-            atk_score = self.evaluate_local(r, c, self.ai_piece)
-            self.board[r][c] = self.player_piece
-            def_score = self.evaluate_local(r, c, self.player_piece)
-            self.board[r][c] = EMPTY
-            hist_score = self.history_heuristic[r][c]
-            return atk_score + def_score * 1.2 + hist_score
-
-        move_set.sort(key=move_score, reverse=True)
+        
+        if self.mode == "hard":
+            def move_score(move):
+                r, c = move
+                self.board[r][c] = self.ai_piece
+                atk_score = self.evaluate_local(r, c, self.ai_piece)
+                self.board[r][c] = self.player_piece
+                def_score = self.evaluate_local(r, c, self.player_piece)
+                self.board[r][c] = EMPTY
+                hist_score = self.history_heuristic[r][c]
+                return atk_score + def_score * 1.2 + hist_score
+            move_set.sort(key=move_score, reverse=True)
+            
         return move_set
 
     def minimax(self, depth, alpha, beta, is_maximizing, last_r, last_c, cancel_token_func):
@@ -146,7 +209,7 @@ class AISolver:
             self.timeout_flag = True
             return 0, None
 
-        if self.current_hash in self.transposition_table:
+        if self.mode == "hard" and self.current_hash in self.transposition_table:
             cached_depth, cached_score, cached_flag = self.transposition_table[self.current_hash]
             if cached_depth >= depth:
                 self.cache_hits += 1
@@ -161,7 +224,7 @@ class AISolver:
 
         if depth == 0 or self.is_full():
             score = self.evaluate_board_incremental()
-            self.transposition_table[self.current_hash] = (depth, score, 'EXACT')
+            if self.mode == "hard": self.transposition_table[self.current_hash] = (depth, score, 'EXACT')
             return score, None
 
         valid_moves = self.get_ordered_moves()
@@ -180,13 +243,15 @@ class AISolver:
                 if eval_score > max_eval:
                     max_eval = eval_score
                     best_move = (r, c)
-                alpha = max(alpha, eval_score)
-                if beta <= alpha:
-                    self.history_heuristic[r][c] += depth ** 2 
-                    break
+                
+                if self.mode in ["normal", "hard"]:
+                    alpha = max(alpha, eval_score)
+                    if beta <= alpha:
+                        if self.mode == "hard": self.history_heuristic[r][c] += depth ** 2 
+                        break 
                     
             flag = 'EXACT' if max_eval > orig_alpha and max_eval < beta else ('LOWERBOUND' if max_eval >= beta else 'UPPERBOUND')
-            if not self.timeout_flag: self.transposition_table[self.current_hash] = (depth, max_eval, flag)
+            if not self.timeout_flag and self.mode == "hard": self.transposition_table[self.current_hash] = (depth, max_eval, flag)
             return max_eval, best_move
         else:
             min_eval = math.inf
@@ -200,18 +265,21 @@ class AISolver:
                 if eval_score < min_eval:
                     min_eval = eval_score
                     best_move = (r, c)
-                beta = min(beta, eval_score)
-                if beta <= alpha:
-                    self.history_heuristic[r][c] += depth ** 2
-                    break
+                
+                if self.mode in ["normal", "hard"]:
+                    beta = min(beta, eval_score)
+                    if beta <= alpha:
+                        if self.mode == "hard": self.history_heuristic[r][c] += depth ** 2
+                        break 
 
             flag = 'EXACT' if min_eval > orig_alpha and min_eval < beta else ('LOWERBOUND' if min_eval <= orig_alpha else 'UPPERBOUND')
-            if not self.timeout_flag: self.transposition_table[self.current_hash] = (depth, min_eval, flag)
+            if not self.timeout_flag and self.mode == "hard": self.transposition_table[self.current_hash] = (depth, min_eval, flag)
             return min_eval, best_move
 
     def search(self, cancel_token_func):
         self.start_time = time.time()
         best_move_overall = None
+        best_score_overall = 0
         reached_depth = 0
 
         for depth in range(1, self.max_depth + 1):
@@ -220,21 +288,22 @@ class AISolver:
                 break
             if move:
                 best_move_overall = move
+                best_score_overall = score
             reached_depth = depth
-            if score > 5000000: break
+            if score > 5000000: break 
 
         t_spent = round(time.time() - self.start_time, 3)
-        return best_move_overall, reached_depth, self.nodes_evaluated, self.cache_hits, t_spent
+        return best_move_overall, best_score_overall, reached_depth, self.nodes_evaluated, self.cache_hits, t_spent
 
 
 # ==========================================
-# PHẦN 2: THREAD-SAFE GUI VỚI HISTORY & UNDO & TIMER
+# PHẦN 2: THREAD-SAFE GUI VỚI HISTORY & TIMER
 # ==========================================
 class GomokuApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Gomoku - Thread-Safe & Features")
-        self.root.geometry("800x950")
+        self.root.title("Gomoku - Full Features with AI Move Log")
+        self.root.geometry("1150x750")
         self.root.configure(bg="#121212")
         
         self.state_lock = threading.Lock()
@@ -259,7 +328,6 @@ class GomokuApp:
         self.offset_x = 0
         self.offset_y = 0
 
-        # --- TIMER VARIABLES ---
         self.timer_running = False
         self.start_time_real = 0
         self.timer_id = None
@@ -290,7 +358,6 @@ class GomokuApp:
             if EMPTY in row: return False
         return True
 
-    # --------------- TÍNH NĂNG BẤM GIỜ ---------------
     def check_and_start_timer(self):
         if not self.timer_running:
             self.timer_running = True
@@ -310,17 +377,21 @@ class GomokuApp:
             self.root.after_cancel(self.timer_id)
             self.timer_id = None
 
-    # --------------- TÍNH NĂNG RESET & UNDO ---------------
-    
     def reset_score(self):
-        """Xóa trắng tỉ số hai bên."""
         self.player_score = 0
         self.ai_score = 0
         self.lbl_score.config(text=f"Bạn: {self.player_score}  -  AI: {self.ai_score}")
-        logging.info("Đã reset tỉ số về 0-0")
+
+    def clear_log(self):
+        """Xóa toàn bộ dữ liệu trong bảng log Treeview và Đánh giá"""
+        for item in self.log_tree.get_children():
+            self.log_tree.delete(item)
+        if hasattr(self, 'lbl_ai_status'):
+            self.lbl_ai_status.config(text="Trạng thái: Sẵn sàng", fg="#ffffff")
+            self.lbl_ai_score_val.config(text="Điểm thế trận: 0", fg="#2ed573")
+            self.lbl_ai_judgment.config(text="Nhận định: Trận đấu cân bằng", fg="#a4b0be")
 
     def stop_game(self):
-        """Ngắt ván cờ hiện tại, dọn dẹp bàn cờ."""
         with self.state_lock:
             self.ai_request_id += 1 
             self.game_active = False
@@ -328,6 +399,7 @@ class GomokuApp:
             
             self.board = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
             self.move_history.clear()
+            self.clear_log() 
             self.last_move_ui = None
             self.winning_line_ui = []
             
@@ -340,31 +412,28 @@ class GomokuApp:
             
             self.draw_board()
             self.update_status("Đã hủy ván. Vui lòng chọn quân cờ!", "#ffa502")
-            logging.info("Đã dừng/reset trận đấu bằng tay.")
 
     def undo_move(self):
-        """Lùi lại 1 bước đi. Nếu AI đã đi, lùi 2 bước để tới lượt mình."""
         with self.state_lock:
-            if not self.move_history:
-                return 
+            if not self.move_history: return 
 
             self.ai_request_id += 1
             self.ai_is_thinking = False
-            
             self.game_active = True 
             self.btn_x.config(state=tk.DISABLED)
             self.btn_o.config(state=tk.DISABLED)
 
             last_piece = self.move_history[-1][2]
-            
-            moves_to_undo = 1
-            if last_piece == self.ai_piece and len(self.move_history) >= 2:
-                moves_to_undo = 2
+            moves_to_undo = 2 if (last_piece == self.ai_piece and len(self.move_history) >= 2) else 1
                 
             for _ in range(moves_to_undo):
                 if self.move_history:
                     r, c, p = self.move_history.pop()
                     self.board[r][c] = EMPTY
+                    
+                    children = self.log_tree.get_children()
+                    if children:
+                        self.log_tree.delete(children[-1])
             
             self.current_turn = self.player_piece
             
@@ -378,16 +447,55 @@ class GomokuApp:
             self.winning_line_ui = []
             self.draw_board()
             self.update_status("Đã lùi bước. Đến lượt BẠN!", "#2ed573")
-            logging.info(f"Undo thực hiện. Đã lùi {moves_to_undo} bước.")
+            self.lbl_ai_status.config(text="Trạng thái: Chờ bạn di chuyển...", fg="#ffffff")
 
-    # -----------------------------------------------------------
+    def load_test_case(self):
+        test_key = self.test_cb_var.get()
+        if test_key not in TEST_CASES:
+            messagebox.showwarning("Cảnh báo", "Vui lòng chọn một trạng thái kiểm thử hợp lệ!")
+            return
+
+        with self.state_lock:
+            self.ai_request_id += 1 
+            self.game_active = True
+            self.ai_is_thinking = False
+            
+            self.player_piece = X_PIECE
+            self.ai_piece = O_PIECE
+            self.btn_x.config(state=tk.DISABLED)
+            self.btn_o.config(state=tk.DISABLED)
+
+            self.board = copy.deepcopy(TEST_CASES[test_key])
+            self.move_history.clear()
+            self.clear_log() 
+            self.last_move_ui = None
+            self.winning_line_ui = []
+
+            x_count = sum(row.count(X_PIECE) for row in self.board)
+            o_count = sum(row.count(O_PIECE) for row in self.board)
+            
+            if x_count == o_count:
+                self.current_turn = X_PIECE
+                self.update_status("Đã nạp xong! Đến lượt BẠN (X) đi.", "#2ed573")
+                self.lbl_ai_status.config(text="Trạng thái: Chờ bạn di chuyển...", fg="#ffffff")
+            else:
+                self.current_turn = O_PIECE
+                self.update_status("Đã nạp xong! Đến lượt AI (O) đi...", "#ffa502")
+            
+            self.stop_timer()
+            self.lbl_timer.config(text="Thời gian: 00:00")
+            self.lbl_stats.config(text="Đã tải dữ liệu kiểm thử. Nhấn vào bàn cờ hoặc đợi AI đánh.")
+            self.draw_board()
+
+            if self.current_turn == self.ai_piece:
+                self._trigger_ai_thread_locked()
 
     def start_game(self, player_piece):
         with self.state_lock:
             self.ai_request_id += 1
-            
             self.board = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
             self.move_history.clear()
+            self.clear_log() 
             
             self.player_piece = player_piece
             self.ai_piece = O_PIECE if player_piece == X_PIECE else X_PIECE
@@ -404,13 +512,13 @@ class GomokuApp:
             
             self.stop_timer()
             self.lbl_timer.config(text="Thời gian: 00:00")
-            
             self.draw_board()
 
             if self.ai_piece == X_PIECE:
                 self._trigger_ai_thread_locked()
             else:
                 self.update_status("Lượt của BẠN!", "#2ed573")
+                self.lbl_ai_status.config(text="Trạng thái: Chờ bạn di chuyển...", fg="#ffffff")
 
     def end_game(self, winner_piece, last_r, last_c):
         self.game_active = False
@@ -428,13 +536,18 @@ class GomokuApp:
         if winner_piece == self.player_piece:
             self.player_score += 1
             self.update_status("BẠN ĐÃ THẮNG!", "#2ed573")
+            self.lbl_ai_status.config(text="Trạng thái: Game Kết Thúc", fg="#2ed573")
+            self.lbl_ai_judgment.config(text="Nhận định: Bạn đã thắng ván này!", fg="#2ed573")
             messagebox.showinfo("Kết quả", "Bạn đã chiến thắng!")
         elif winner_piece == self.ai_piece:
             self.ai_score += 1
             self.update_status("AI ĐÃ THẮNG!", "#ff4757")
+            self.lbl_ai_status.config(text="Trạng thái: Game Kết Thúc", fg="#ff4757")
+            self.lbl_ai_judgment.config(text="Nhận định: AI hạ gục người chơi!", fg="#ff4757")
             messagebox.showinfo("Kết quả", "AI đã chiến thắng!")
         else:
             self.update_status("VÁN CỜ HÒA!", "#ffa502")
+            self.lbl_ai_status.config(text="Trạng thái: Game Kết Thúc", fg="#ffa502")
             messagebox.showinfo("Kết quả", "Hòa!")
 
         self.draw_board()
@@ -456,8 +569,11 @@ class GomokuApp:
                 self.last_move_ui = (r, c)
                 self.current_turn = self.ai_piece 
                 
+                pos_str = f"{chr(65 + c)}{r + 1}"
+                self.log_tree.insert("", "end", values=(len(self.move_history), "Người", pos_str, "-", "-"))
+                self.log_tree.yview_moveto(1.0) 
+
                 self.check_and_start_timer()
-                
                 self.draw_board()
 
                 is_win, _ = self.check_win_logic(self.board, r, c, self.player_piece)
@@ -473,21 +589,28 @@ class GomokuApp:
         current_req_id = self.ai_request_id
         self.ai_is_thinking = True
         
+        self.lbl_ai_status.config(text="Trạng thái: AI đang suy nghĩ...", fg="#ffa502")
+        
         board_snapshot = copy.deepcopy(self.board)
+        current_mode_text = self.mode_var.get()
+        if "Easy" in current_mode_text: logic_mode = "easy"
+        elif "Normal" in current_mode_text: logic_mode = "normal"
+        else: logic_mode = "hard"
+
         t = threading.Thread(
             target=self.run_ai_logic, 
-            args=(board_snapshot, self.ai_piece, self.player_piece, current_req_id, self.depth_var.get(), self.time_var.get()), 
+            args=(board_snapshot, self.ai_piece, self.player_piece, current_req_id, self.depth_var.get(), self.time_var.get(), logic_mode), 
             daemon=True
         )
         t.start()
-        self.update_status("AI đang phân tích...", "#ffa502")
+        self.update_status(f"AI đang phân tích ({logic_mode})...", "#ffa502")
 
-    def run_ai_logic(self, board_snapshot, ai_p, pl_p, req_id, d_limit, t_limit):
-        solver = AISolver(board_snapshot, ai_p, pl_p, req_id, d_limit, t_limit)
-        best_move, depth, nodes, hits, t_spent = solver.search(self.get_cancel_token)
-        self.root.after(0, self.apply_ai_move, best_move, req_id, depth, nodes, hits, t_spent)
+    def run_ai_logic(self, board_snapshot, ai_p, pl_p, req_id, d_limit, t_limit, mode):
+        solver = AISolver(board_snapshot, ai_p, pl_p, req_id, d_limit, t_limit, mode)
+        best_move, best_score, depth, nodes, hits, t_spent = solver.search(self.get_cancel_token)
+        self.root.after(0, self.apply_ai_move, best_move, best_score, req_id, depth, nodes, hits, t_spent)
 
-    def apply_ai_move(self, move, req_id, depth, nodes, hits, t_spent):
+    def apply_ai_move(self, move, best_score, req_id, depth, nodes, hits, t_spent):
         with self.state_lock:
             if not self.game_active or req_id != self.ai_request_id or self.current_turn != self.ai_piece:
                 return
@@ -503,9 +626,43 @@ class GomokuApp:
                 self.current_turn = self.player_piece
                 
                 self.check_and_start_timer()
-                
                 self.draw_board()
-                self.lbl_stats.config(text=f"Depth: {depth} | Nodes: {nodes} | Cache: {hits} | Time: {t_spent}s")
+                
+                display_score = best_score
+                if best_score > 5000000: display_score = "Thắng tuyệt đối!"
+                elif best_score < -5000000: display_score = "Thua tuyệt đối!"
+                
+                self.lbl_stats.config(text=f"Score: {display_score} | Depth: {depth} | Nodes: {nodes} | TT Cache: {hits} | Time: {t_spent}s")
+
+                # Cập nhật thông tin vào Dashboard đánh giá bên phải
+                self.lbl_ai_status.config(text="Trạng thái: Đang đợi Bạn đi...", fg="#2ed573")
+                self.lbl_ai_score_val.config(text=f"Điểm thế trận: {display_score}", fg="#5352ed" if isinstance(best_score, str) else ("#ff4757" if best_score > 500 else "#2ed573"))
+                
+                if isinstance(best_score, (int, float)):
+                    if best_score > 10000:
+                        judgment = "AI đang ép sân rất mạnh!"
+                        j_color = "#ff4757"
+                    elif best_score > 500:
+                        judgment = "AI lợi thế chủ động công."
+                        j_color = "#ffa502"
+                    elif best_score < -10000:
+                        judgment = "Nguy hiểm! Bạn đang áp đảo AI."
+                        j_color = "#2ed573"
+                    elif best_score < -500:
+                        judgment = "Bạn đang giữ thế chủ động."
+                        j_color = "#2ed573"
+                    else:
+                        judgment = "Thế trận cân bằng giằng co."
+                        j_color = "#a4b0be"
+                else:
+                    judgment = "Trận đấu đã ngã ngũ cục diện!"
+                    j_color = "#ff4757"
+                self.lbl_ai_judgment.config(text=f"Nhận định: {judgment}", fg=j_color)
+
+                # Ghi nhận nước đi kèm Điểm số đánh giá + Thời gian xử lý của AI vào bảng Log UI Treeview
+                pos_str = f"{chr(65 + c)}{r + 1}"
+                self.log_tree.insert("", "end", values=(len(self.move_history), "AI", pos_str, display_score, f"{t_spent}s"))
+                self.log_tree.yview_moveto(1.0) 
 
                 is_win, _ = self.check_win_logic(self.board, r, c, self.ai_piece)
                 if is_win:
@@ -515,29 +672,44 @@ class GomokuApp:
                 else:
                     self.update_status("Đến lượt BẠN!", "#2ed573")
 
-
     # --------------- UI SETUP & DRAWING ---------------
     def setup_styles(self):
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("TButton", font=("Arial", 10, "bold"), padding=5)
         style.configure("Dark.TFrame", background="#121212")
+        
+        style.configure("Treeview", background="#2f3542", foreground="white", fieldbackground="#2f3542", rowheight=25, font=("Consolas", 10))
+        style.configure("Treeview.Heading", background="#1e272e", foreground="white", font=("Arial", 10, "bold"))
+        style.map("Treeview.Heading", background=[('active', '#2f3542')])
 
     def setup_ui(self):
         header = ttk.Frame(self.root, style="Dark.TFrame")
         header.pack(fill=tk.X, pady=10)
 
+        # Hàng 1: Cấu hình tham số AI
         config_frame = ttk.Frame(header, style="Dark.TFrame")
         config_frame.pack(pady=5)
         
-        tk.Label(config_frame, text="Max Depth:", bg="#121212", fg="white").pack(side=tk.LEFT, padx=5)
-        self.depth_var = tk.IntVar(value=5)
-        ttk.Spinbox(config_frame, from_=3, to=8, textvariable=self.depth_var, width=5).pack(side=tk.LEFT)
+        tk.Label(config_frame, text="Depth:", bg="#121212", fg="white").pack(side=tk.LEFT)
+        self.depth_var = tk.IntVar(value=4)
+        ttk.Spinbox(config_frame, from_=2, to=8, textvariable=self.depth_var, width=3).pack(side=tk.LEFT)
         
-        tk.Label(config_frame, text="Time Limit (s):", bg="#121212", fg="white").pack(side=tk.LEFT, padx=10)
-        self.time_var = tk.DoubleVar(value=1.5)
-        ttk.Spinbox(config_frame, from_=0.5, to=5.0, increment=0.5, textvariable=self.time_var, width=5).pack(side=tk.LEFT)
+        tk.Label(config_frame, text="Time(s):", bg="#121212", fg="white").pack(side=tk.LEFT, padx=(10, 0))
+        self.time_var = tk.DoubleVar(value=2.0)
+        ttk.Spinbox(config_frame, from_=0.5, to=10.0, increment=0.5, textvariable=self.time_var, width=4).pack(side=tk.LEFT)
 
+        tk.Label(config_frame, text="Mode:", bg="#121212", fg="white").pack(side=tk.LEFT, padx=(10, 0))
+        self.mode_var = tk.StringVar(value="Normal (Minimax + Alpha-Beta)")
+        cb_mode = ttk.Combobox(config_frame, textvariable=self.mode_var, state="readonly", width=30)
+        cb_mode['values'] = [
+            "Easy (Chỉ Minimax)",
+            "Normal (Minimax + Alpha-Beta)",
+            "Hard (Alpha-Beta + Bảng băm)"
+        ]
+        cb_mode.pack(side=tk.LEFT)
+
+        # Hàng 2: Chọn phe chọn quân
         btn_frame = ttk.Frame(header, style="Dark.TFrame")
         btn_frame.pack(pady=5)
         self.btn_x = tk.Button(btn_frame, text="Chơi X (Đi trước)", bg="#ff4757", fg="white", command=lambda: self.start_game(X_PIECE))
@@ -545,38 +717,93 @@ class GomokuApp:
         self.btn_o = tk.Button(btn_frame, text="Chơi O (Đi sau)", bg="#1e90ff", fg="white", command=lambda: self.start_game(O_PIECE))
         self.btn_o.pack(side=tk.LEFT, padx=10)
 
+        # Hàng 3: Các nút chức năng điều khiển hành động
         action_frame = ttk.Frame(header, style="Dark.TFrame")
         action_frame.pack(pady=5)
-        
-        btn_undo = tk.Button(action_frame, text="↶ Lùi bước", bg="#2f3542", fg="white", command=self.undo_move)
-        btn_undo.pack(side=tk.LEFT, padx=5)
-        
-        btn_stop = tk.Button(action_frame, text="⏹ Dừng/Reset Trận", bg="#2f3542", fg="white", command=self.stop_game)
-        btn_stop.pack(side=tk.LEFT, padx=5)
-        
-        btn_score_reset = tk.Button(action_frame, text="🔄 Reset Tỉ số", bg="#2f3542", fg="white", command=self.reset_score)
-        btn_score_reset.pack(side=tk.LEFT, padx=5)
+        tk.Button(action_frame, text="↶ Lùi bước (Undo)", bg="#2f3542", fg="white", command=self.undo_move).pack(side=tk.LEFT, padx=5)
+        tk.Button(action_frame, text="⏹ Dừng/Reset Trận", bg="#2f3542", fg="white", command=self.stop_game).pack(side=tk.LEFT, padx=5)
+        tk.Button(action_frame, text="🔄 Reset Tỉ số", bg="#2f3542", fg="white", command=self.reset_score).pack(side=tk.LEFT, padx=5)
+        # Nút mới được thêm vào đây:
+        tk.Button(action_frame, text="🗑 Xóa Log", bg="#2f3542", fg="white", command=self.clear_log).pack(side=tk.LEFT, padx=5)
 
+        # Hàng 4: Bộ kiểm thử Test Cases (Level 3)
+        test_frame = ttk.Frame(header, style="Dark.TFrame")
+        test_frame.pack(pady=5)
+        tk.Label(test_frame, text="Level 3 Test:", bg="#121212", fg="white").pack(side=tk.LEFT)
+        self.test_cb_var = tk.StringVar()
+        test_cb = ttk.Combobox(test_frame, textvariable=self.test_cb_var, state="readonly", width=35)
+        test_cb['values'] = list(TEST_CASES.keys())
+        if len(TEST_CASES) > 0: test_cb.current(0)
+        test_cb.pack(side=tk.LEFT, padx=5)
+        tk.Button(test_frame, text="Nạp bàn cờ", bg="#f39c12", fg="white", command=self.load_test_case).pack(side=tk.LEFT)
+
+        # Trạng thái tổng quát bên trên bàn cờ
         self.lbl_score = tk.Label(header, text="Bạn: 0  -  AI: 0", font=("Consolas", 18, "bold"), bg="#121212", fg="#2ed573")
         self.lbl_score.pack(pady=5)
         
         self.lbl_timer = tk.Label(header, text="Thời gian: 00:00", font=("Consolas", 14, "bold"), bg="#121212", fg="#ffdd59")
         self.lbl_timer.pack(pady=2)
         
-        self.lbl_status = tk.Label(header, text="Vui lòng chọn quân cờ", font=("Arial", 14), bg="#121212", fg="#ffa502")
+        self.lbl_status = tk.Label(header, text="Vui lòng chọn quân cờ hoặc nạp bàn cờ kiểm thử", font=("Arial", 14), bg="#121212", fg="#ffa502")
         self.lbl_status.pack()
 
         self.lbl_stats = tk.Label(header, text="", font=("Consolas", 10), bg="#121212", fg="#a4b0be")
         self.lbl_stats.pack()
 
-        self.canvas_frame = tk.Frame(self.root, bg="#121212")
-        self.canvas_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        # --- PHẦN THÂN GIAO DIỆN CHIA ĐÔI (MAIN BODY SPLIT) ---
+        main_body = ttk.Frame(self.root, style="Dark.TFrame")
+        main_body.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Khu vực Trái: Bàn cờ Canvas
+        self.canvas_frame = tk.Frame(main_body, bg="#121212")
+        self.canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         self.canvas = tk.Canvas(self.canvas_frame, bg="#1e272e", highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True)
-
         self.canvas.bind("<Configure>", lambda e: self.draw_board())
         self.canvas.bind("<Button-1>", self.on_canvas_click)
+
+        # Khu vực Phải: Bảng Log Lịch sử bước đi & Đánh giá AI
+        log_frame = tk.Frame(main_body, bg="#1e1e24", width=420)
+        log_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(15, 0))
+        log_frame.pack_propagate(False)
+
+        # --- 1. KHUNG CON ĐÁNH GIÁ THẾ TRẬN AI ---
+        eval_lf = tk.LabelFrame(log_frame, text=" ĐÁNH GIÁ THẾ TRẬN & ĐIỂM SỐ ", font=("Arial", 11, "bold"), bg="#1e1e24", fg="#ffdd59", bd=1, relief=tk.SOLID)
+        eval_lf.pack(fill=tk.X, pady=(0, 15), padx=5)
+
+        self.lbl_ai_status = tk.Label(eval_lf, text="Trạng thái: Sẵn sàng", font=("Arial", 10), bg="#1e1e24", fg="#ffffff", anchor=tk.W)
+        self.lbl_ai_status.pack(fill=tk.X, padx=10, pady=4)
+
+        self.lbl_ai_score_val = tk.Label(eval_lf, text="Điểm thế trận: 0", font=("Arial", 10), bg="#1e1e24", fg="#2ed573", anchor=tk.W)
+        self.lbl_ai_score_val.pack(fill=tk.X, padx=10, pady=4)
+        
+        self.lbl_ai_judgment = tk.Label(eval_lf, text="Nhận định: Trận đấu cân bằng", font=("Arial", 10, "italic"), bg="#1e1e24", fg="#a4b0be", anchor=tk.W)
+        self.lbl_ai_judgment.pack(fill=tk.X, padx=10, pady=(4, 8))
+
+        # --- 2. KHUNG CON LỊCH SỬ NƯỚC ĐI (TREEVIEW) ---
+        hist_lf = tk.LabelFrame(log_frame, text=" LỊCH SỬ NƯỚC ĐI ", font=("Arial", 11, "bold"), bg="#1e1e24", fg="#ffdd59", bd=1, relief=tk.SOLID)
+        hist_lf.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        columns = ("no", "player", "pos", "score", "time")
+        self.log_tree = ttk.Treeview(hist_lf, columns=columns, show="headings")
+        
+        self.log_tree.heading("no", text="#")
+        self.log_tree.heading("player", text="Bên đi")
+        self.log_tree.heading("pos", text="Vị trí")
+        self.log_tree.heading("score", text="Điểm AI")
+        self.log_tree.heading("time", text="Thời gian")
+
+        self.log_tree.column("no", width=35, anchor=tk.CENTER)
+        self.log_tree.column("player", width=65, anchor=tk.CENTER)
+        self.log_tree.column("pos", width=60, anchor=tk.CENTER)
+        self.log_tree.column("score", width=120, anchor=tk.W)
+        self.log_tree.column("time", width=80, anchor=tk.CENTER)
+
+        scrollbar = ttk.Scrollbar(hist_lf, orient=tk.VERTICAL, command=self.log_tree.yview)
+        self.log_tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     def update_status(self, text, color):
         self.lbl_status.config(text=text, fg=color)
@@ -586,14 +813,12 @@ class GomokuApp:
         w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
         if w < 10 or h < 10: return
 
-        # Dành lại một khoảng không gian cho toạ độ (Margin)
         margin = 40
         board_size_px = min(w, h) * 0.9 - margin
         self.cell_size = board_size_px / BOARD_SIZE
         self.offset_x = (w - board_size_px) / 2 + margin / 2
         self.offset_y = (h - board_size_px) / 2 + margin / 2
 
-        # Vẽ lưới cờ
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 x1 = self.offset_x + c * self.cell_size
@@ -616,16 +841,12 @@ class GomokuApp:
                     elif piece == O_PIECE:
                         self.canvas.create_oval(x1+pad, y1+pad, x2-pad, y2-pad, outline="#1e90ff", width=thickness)
 
-        # Vẽ Toạ độ (A,B,C... và 1,2,3...)
         font_size = max(8, int(self.cell_size * 0.3))
-        
-        # Cột (A, B, C...)
         for c in range(BOARD_SIZE):
             x = self.offset_x + c * self.cell_size + self.cell_size / 2
             y = self.offset_y - 15
             self.canvas.create_text(x, y, text=chr(65 + c), fill="#a4b0be", font=("Arial", font_size, "bold"))
             
-        # Hàng (1, 2, 3...)
         for r in range(BOARD_SIZE):
             x = self.offset_x - 15
             y = self.offset_y + r * self.cell_size + self.cell_size / 2
